@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Contagem de Temas Selecionados</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #fff;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        .contagem {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .contagem h2 {
+            margin: 0 0 10px 0;
+        }
+
+        .contagem ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .contagem li {
+            padding: 8px;
+            background: #f9f9f9;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .contagem li.ativo {
+            background-color: #d4edda; /* Fundo verde claro */
+            color: #155724; /* Texto verde escuro */
+        }
+
+        .tema-info {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .tema-numero {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .tema-texto {
+            flex-grow: 1;
+        }
+
+        .tema-contagem {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <h1>Contagem de Temas Selecionados</h1>
+    <div class="contagem">
+        <ul>
+            {% for key, value in contagem_temas.items() %}
+                <li class="{% if value > 0 %}ativo{% endif %}">
+                    <div class="tema-info">
+                        <span class="tema-numero">{{ key }}</span>
+                        <span class="tema-texto">{{ temas[key] }}</span>
+                        <span class="tema-contagem">{{ value }} vez(es)</span>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

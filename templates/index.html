@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador de Temas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: white;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        .resultado {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e7f3fe;
+            border: 1px solid #b3d4fc;
+            border-radius: 4px;
+            color: #31708f;
+        }
+
+        .contagem {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .contagem h2 {
+            margin: 0 0 10px 0;
+        }
+
+        .contagem ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .contagem li {
+            padding: 8px;
+            background: #f9f9f9;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .contagem li.ativo {
+            background-color: #d4edda; /* Fundo verde claro */
+            color: #155724; /* Texto verde escuro */
+        }
+
+        .tema-info {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .tema-numero {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .tema-texto {
+            flex-grow: 1;
+        }
+
+        .tema-contagem {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Buscador de Temas</h1>
+        <form method="POST">
+            <label for="tema">Escolha um tema:</label>
+            <select name="tema" id="tema">
+                <option value="">Selecione um tema</option>
+                {% for key, value in temas.items() %}
+                    <option value="{{ key }}">{{ key }} - {{ value }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Enviar</button>
+        </form>
+
+        <button onclick="window.location.href='/gerar_pdf'">Gerar PDF</button>
+        <button onclick="confirmarZerarContagens()">Zerar Contagens</button>
+
+        {% if tema %}
+            <div class="resultado">
+                <h2>Você selecionou:</h2>
+                <p>{{ temas[tema] }}</p>
+            </div>
+        {% endif %}
+
+        <div class="contagem">
+            <h2>Contagem de Temas Selecionados</h2>
+            <ul>
+                {% for key, value in contagem_temas.items() %}
+                    <li class="{% if value > 0 %}ativo{% endif %}">
+                        <div class="tema-info">
+                            <span class="tema-numero">{{ key }}</span>
+                            <span class="tema-texto">{{ temas[key] }}</span>
+                            <span class="tema-contagem">{{ value }} vez(es)</span>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Função para confirmar se o usuário deseja zerar as contagens
+        function confirmarZerarContagens() {
+            if (confirm("Tem certeza que deseja zerar todas as contagens? Esta ação não pode ser desfeita.")) {
+                // Se o usuário confirmar, redireciona para a rota /zerar_contagens
+                window.location.href = "/zerar_contagens";
+            }
+        }
+    </script>
+</body>
+</html>
