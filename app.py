@@ -1,6 +1,13 @@
 from flask import Flask, render_template, request, send_file, redirect
 import pdfkit
 import io
+import platform
+import json
+import os
+import signal
+import sys
+import threading
+
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta'  # Necessário para mensagens flash
 
@@ -208,11 +215,32 @@ temas = {
     200: "Você está se dedicando a fazer a diferença na vida dos outros?"
 }
 
-# Dicionário para contar as seleções de temas
-contagem_temas = {key: 0 for key in temas.keys()}
+# Caminho do arquivo para salvar a contagem
+CONTAGEM_FILE = 'contagem.json'
 
-# Configure o caminho para o executável do wkhtmltopdf
-config = pdfkit.configuration(wkhtmltopdf='C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe')
+# Função para carregar a contagem do arquivo
+def carregar_contagem():
+    if os.path.exists(CONTAGEM_FILE):
+        with open(CONTAGEM_FILE, 'r') as f:
+            contagem_salva = json.load(f)
+            # Garante que todos os temas estejam no dicionário, mesmo que não tenham sido selecionados
+            return {int(key): contagem_salva.get(str(key), 0) for key in temas.keys()}
+    else:
+        return {key: 0 for key in temas.keys()}
+
+# Função para salvar a contagem no arquivo
+def salvar_contagem(contagem):
+    with open(CONTAGEM_FILE, 'w') as f:
+        json.dump(contagem, f)
+
+# Carrega a contagem ao iniciar o servidor
+contagem_temas = carregar_contagem()
+
+# Configuração do pdfkit para funcionar em Windows e Linux
+if platform.system() == "Windows":
+    config = pdfkit.configuration(wkhtmltopdf='C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe')
+else:
+    config = pdfkit.configuration(wkhtmltopdf='/usr/bin/wkhtmltopdf')
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -221,12 +249,14 @@ def index():
         tema_selecionado = request.form.get('tema')
         if tema_selecionado:
             contagem_temas[int(tema_selecionado)] += 1
+            salvar_contagem(contagem_temas)  # Salva a contagem após cada alteração
     return render_template('index.html', tema=tema_selecionado, temas=temas, contagem_temas=contagem_temas)
 
 @app.route('/zerar_contagens', methods=['GET'])
 def zerar_contagens():
     global contagem_temas
     contagem_temas = {key: 0 for key in temas.keys()}
+    salvar_contagem(contagem_temas)  # Salva a contagem zerada
     return redirect('/')
 
 @app.route('/gerar_pdf', methods=['GET'])
@@ -244,5 +274,18 @@ def gerar_pdf():
     except Exception as e:
         return str(e), 500
 
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    """Encerra o servidor Flask."""
+    os.kill(os.getpid(), signal.SIGINT)
+    return 'Servidor encerrado com sucesso!'
+@app.route('/favicon.ico')
+def favicon():
+    return '', 404
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    try:
+        app.run(host='0.0.0.0', port=8080)  # ✅ Pronto para deploy
+    except KeyboardInterrupt:
+        print("Servidor encerrado pelo usuário.")
+        sys.exit(0)
