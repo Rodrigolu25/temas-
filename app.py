@@ -215,77 +215,80 @@ temas = {
     200: "Você está se dedicando a fazer a diferença na vida dos outros?"
 }
 
-# Caminho do arquivo para salvar a contagem
-CONTAGEM_FILE = 'contagem.json'
+# Configuração de caminhos
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONTAGEM_FILE = os.path.join(BASE_DIR, 'contagem.json')
 
-# Função para carregar a contagem do arquivo
-def carregar_contagem():
-    if os.path.exists(CONTAGEM_FILE):
-        with open(CONTAGEM_FILE, 'r') as f:
-            contagem_salva = json.load(f)
-            # Garante que todos os temas estejam no dicionário, mesmo que não tenham sido selecionados
-            return {int(key): contagem_salva.get(str(key), 0) for key in temas.keys()}
-    else:
-        return {key: 0 for key in temas.keys()}
-
-# Função para salvar a contagem no arquivo
-def salvar_contagem(contagem):
-    with open(CONTAGEM_FILE, 'w') as f:
-        json.dump(contagem, f)
-
-# Carrega a contagem ao iniciar o servidor
-contagem_temas = carregar_contagem()
-
-# Configuração do pdfkit para funcionar em Windows e Linux
+# Configuração do pdfkit
 if platform.system() == "Windows":
     config = pdfkit.configuration(wkhtmltopdf='C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe')
 else:
     config = pdfkit.configuration(wkhtmltopdf='/usr/bin/wkhtmltopdf')
 
+def carregar_contagem():
+    try:
+        if os.path.exists(CONTAGEM_FILE):
+            with open(CONTAGEM_FILE, 'r') as f:
+                contagem_salva = json.load(f)
+                return {int(k): contagem_salva.get(str(k), 0) for k in temas.keys()}
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return {k: 0 for k in temas.keys()}
+
+def salvar_contagem(contagem):
+    with open(CONTAGEM_FILE, 'w') as f:
+        json.dump({str(k): v for k, v in contagem.items()}, f)
+
+# Inicializa a contagem no início
+contagem_temas = carregar_contagem()
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    tema_selecionado = None
+    global contagem_temas
     if request.method == 'POST':
-        tema_selecionado = request.form.get('tema')
-        if tema_selecionado:
-            contagem_temas[int(tema_selecionado)] += 1
-            salvar_contagem(contagem_temas)  # Salva a contagem após cada alteração
-    return render_template('index.html', tema=tema_selecionado, temas=temas, contagem_temas=contagem_temas)
+        tema = request.form.get('tema')
+        if tema and tema.isdigit():
+            tema_id = int(tema)
+            if tema_id in contagem_temas:
+                contagem_temas[tema_id] += 1
+                salvar_contagem(contagem_temas)
+    return render_template('index.html', temas=temas, contagem_temas=contagem_temas)
 
-@app.route('/zerar_contagens', methods=['GET'])
+@app.route('/zerar_contagens')
 def zerar_contagens():
     global contagem_temas
-    contagem_temas = {key: 0 for key in temas.keys()}
-    salvar_contagem(contagem_temas)  # Salva a contagem zerada
+    contagem_temas = {k: 0 for k in temas.keys()}
+    salvar_contagem(contagem_temas)
     return redirect('/')
 
-@app.route('/gerar_pdf', methods=['GET'])
+@app.route('/gerar_pdf')
 def gerar_pdf():
-    rendered = render_template('pdf_template.html', contagem_temas=contagem_temas, temas=temas)
     try:
+        rendered = render_template('pdf_template.html', 
+                                temas=temas, 
+                                contagem_temas=contagem_temas)
         pdf = pdfkit.from_string(rendered, False, configuration=config)
-        pdf_bytes = io.BytesIO(pdf)
         return send_file(
-            pdf_bytes,
+            io.BytesIO(pdf),
+            mimetype='application/pdf',
             as_attachment=True,
-            download_name='contagem_temas.pdf',
-            mimetype='application/pdf'
+            download_name='contagem_temas.pdf'
         )
     except Exception as e:
-        return str(e), 500
+        print(f"Erro ao gerar PDF: {str(e)}")
+        return "Erro ao gerar PDF", 500
 
-@app.route('/shutdown', methods=['POST'])
-def shutdown():
-    """Encerra o servidor Flask."""
-    os.kill(os.getpid(), signal.SIGINT)
-    return 'Servidor encerrado com sucesso!'
 @app.route('/favicon.ico')
 def favicon():
     return '', 404
 
 if __name__ == '__main__':
+    # Garante que o arquivo de contagem existe ao iniciar
+    if not os.path.exists(CONTAGEM_FILE):
+        salvar_contagem({k: 0 for k in temas.keys()})
+    
     try:
-        app.run(host='0.0.0.0', port=8080)  # ✅ Pronto para deploy
+        app.run(host='0.0.0.0', port=8080, debug=False)
     except KeyboardInterrupt:
-        print("Servidor encerrado pelo usuário.")
+        print("\nServidor encerrado pelo usuário.")
         sys.exit(0)
