@@ -91,7 +91,6 @@
             background: var(--cor-secundaria);
         }
 
-        /* Estilos para os resultados */
         .resultado, .contagem {
             margin-top: 15px;
             padding: 12px;
@@ -115,7 +114,6 @@
             font-size: 1.2rem;
         }
 
-        /* Itens da lista */
         .contagem ul {
             list-style: none;
             padding: 0;
@@ -158,21 +156,21 @@
             margin-left: auto;
         }
 
-        /* Avisos e informações */
-        .info-text {
+        .device-instruction {
             font-size: 0.8rem;
             color: #666;
             margin: 5px 0;
             text-align: center;
+            padding: 5px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
         }
 
-        /* Melhorias para touch */
         select:focus, button:active {
             outline: none;
             box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.3);
         }
 
-        /* Scroll suave */
         html {
             scroll-behavior: smooth;
         }
@@ -196,10 +194,13 @@
             <label for="temas">Selecione de 1 a 10 temas:</label>
             <select name="temas" id="temas" multiple class="select-multiple" size="5">
                 {% for key, value in temas.items() %}
-                    <option value="{{ key }}">{{ key }} - {{ value|truncate(50) }}</option>
+                    <option value="{{ key }}">{{ key }} - {{ value }}</option>
                 {% endfor %}
             </select>
-            <p class="info-text">Toque nos temas para selecionar múltiplos</p>
+            
+            <div id="instruction" class="device-instruction">
+                <!-- Instruções serão inseridas aqui via JavaScript -->
+            </div>
             
             <div class="button-group">
                 <button type="submit" id="enviarBtn">Enviar Seleção</button>
@@ -236,6 +237,18 @@
     </div>
 
     <script>
+        // Detecta o dispositivo e mostra instruções apropriadas
+        function showSelectionInstructions() {
+            const instructionElement = document.getElementById('instruction');
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+                instructionElement.innerHTML = 'Toque nos temas para selecionar múltiplos. Segure para selecionar vários.';
+            } else {
+                instructionElement.innerHTML = 'Pressione <strong>Ctrl</strong> (Windows/Linux) ou <strong>Command</strong> (Mac) para selecionar múltiplos temas.';
+            }
+        }
+
         // Função para confirmar se o usuário deseja zerar as contagens
         function confirmarZerarContagens() {
             if (confirm("Tem certeza que deseja zerar todas as contagens?\nEsta ação não pode ser desfeita.")) {
@@ -262,12 +275,8 @@
             }
         });
 
-        // Melhoria para mobile: fecha o teclado virtual após seleção
-        if ('virtualKeyboard' in navigator) {
-            document.getElementById('temas').addEventListener('change', function() {
-                navigator.virtualKeyboard.hide();
-            });
-        }
+        // Mostra instruções quando a página carrega
+        window.onload = showSelectionInstructions;
     </script>
 </body>
 </html>
