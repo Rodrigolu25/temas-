@@ -274,7 +274,7 @@ def gerar_pdf():
             io.BytesIO(pdf),
             mimetype='application/pdf',
             as_attachment=True,
-            download_name='contagem_temas.pdf'
+            download_name='Discursos públicos já feitos.pdf'
         )
     except Exception as e:
         print(f"Erro ao gerar PDF: {str(e)}")
