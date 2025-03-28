@@ -239,14 +239,22 @@ contagem_temas = carregar_contagem()
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global contagem_temas
+    temas_selecionados = []
+    
     if request.method == 'POST':
-        tema = request.form.get('tema')
-        if tema and tema.isdigit():
-            tema_id = int(tema)
-            if tema_id in contagem_temas:
-                contagem_temas[tema_id] += 1
-                salvar_contagem(contagem_temas)
-    return render_template('index.html', temas=temas, contagem_temas=contagem_temas)
+        temas_selecionados = request.form.getlist('temas')
+        if temas_selecionados:
+            for tema in temas_selecionados:
+                if tema.isdigit():
+                    tema_id = int(tema)
+                    if tema_id in contagem_temas:
+                        contagem_temas[tema_id] += 1
+            salvar_contagem(contagem_temas)
+    
+    return render_template('index.html', 
+                         temas=temas, 
+                         contagem_temas=contagem_temas,
+                         temas_selecionados=[int(t) for t in temas_selecionados if t.isdigit()])
 
 @app.route('/zerar_contagens')
 def zerar_contagens():
@@ -282,7 +290,7 @@ if __name__ == '__main__':
         salvar_contagem({k: 0 for k in temas.keys()})
     
     try:
-        app.run(host='0.0.0.0', port=8080, debug=False)
+        app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), debug=False)
     except KeyboardInterrupt:
         print("\nServidor encerrado pelo usuário.")
         sys.exit(0)
