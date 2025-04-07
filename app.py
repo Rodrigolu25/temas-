@@ -1,296 +1,377 @@
-from flask import Flask, render_template, request, send_file, redirect
-import pdfkit
-import io
-import platform
-import json
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime, date
+from sqlalchemy import func, extract
 import os
-import signal
-import sys
-import threading
+from dotenv import load_dotenv
+from urllib.parse import urlparse
+import logging
+
+# Configuração inicial
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = 'sua_chave_secreta'  # Necessário para mensagens flash
 
-# Dicionário de temas
-temas = {
-   1: "Você conhece bem a Deus?",
-    2: "Você vai sobreviver aos últimos dias?",
-    3: "Você está avançando com a organização unida de Jeová?",
-    4: "Que provas temos de que Deus existe?",
-    5: "Você pode ter uma família feliz!",
-    6: "O dilúvio dos dias de Noé e você",
-    7: "Imite a misericórdia de Jeová",
-    8: "Viva para fazer a vontade de Deus",
-    9: "Escute e faça o que a Bíblia diz",
-    10: "Seja honesto em tudo",
-    11: "Imite a Jesus e não faça parte do mundo",
-    12: "Deus quer que você respeite quem tem autoridade",
-    13: "Qual o ponto de vista de Deus sobre o sexo e o casamento?",
-    14: "Um povo puro e limpo honra a Jeová",
-    15: "‘Faça o bem a todos’",
-    16: "Seja cada vez mais amigo de Jeová",
-    17: "Glorifique a Deus com tudo o que você tem",
-    18: "Faça de Jeová a sua fortaleza",
-    19: "Como você pode saber seu futuro?",
-    20: "Chegou o tempo de Deus governar o mundo?",
-    21: "Dê valor ao seu lugar no Reino de Deus",
-    22: "Você está usando bem o que Jeová lhe dá?",
-    23: "A vida tem objetivo",
-    24: "Você encontrou 'uma pérola de grande valor'?",
-    25: "Lute contra o espírito do mundo",
-    26: "Você é importante para Deus?",
-    27: "Como construir um casamento feliz",
-    28: "Mostre respeito e amor no seu casamento",
-    29: "As responsabilidades e recompensas de ter filhos",
-    30: "Como melhorar a comunicação na família",
-    31: "Você tem consciência da sua necessidade espiritual?",
-    32: "Como lidar com as ansiedades da vida",
-    33: "Quando vai existir verdadeira justiça?",
-    34: "Você vai ser marcado para sobreviver?",
-    35: "É possível viver para sempre? O que você precisa fazer?",
-    36: "Será que a vida é só isso?",
-    37: "Obedecer a Deus é mesmo a melhor coisa a fazer?",
-    38: "Como você pode sobreviver ao fim do mundo?",
-    39: "Jesus Cristo vence o mundo — Como e quando?",
-    40: "O que vai acontecer em breve?",
-    41: "Fiquem parados e vejam como Jeová os salvará",
-    42: "O amor pode vencer o ódio?",
-    43: "Tudo o que Deus nos pede é para o nosso bem",
-    44: "Como os ensinos de Jesus podem ajudar você?",
-    45: "Siga o caminho da vida",
-    46: "Fortaleça sua confiança em Jeová",
-    47: "(Indisponível)",
-    48: "Seja leal a Deus mesmo quando for testado",
-    49: "Será que um dia a Terra vai ser limpa?",
-    50: "Como sempre tomar as melhores decisões",
-    51: "Será que a verdade da Bíblia está mudando a sua vida?",
-    52: "Quem é o seu Deus?",
-    53: "Você pensa como Deus?",
-    54: "Fortaleça sua fé em Deus e em suas promessas",
-    55: "Você está fazendo um bom nome perante Deus?",
-    56: "Existe um líder em quem você pode confiar?",
-    57: "Como suportar perseguição",
-    58: "Quem são os verdadeiros seguidores de Cristo?",
-    59: "Ceifará o que semear",
-    60: "Você tem um objetivo na vida?",
-    61: "Nas promessas de quem você confia?",
-    62: "Onde encontrar uma esperança real para o futuro?",
-    63: "Tem você espírito evangelizador?",
-    64: "Você ama os prazeres ou a Deus?",
-    65: "Como podemos ser pacíficos num mundo cheio de ódio",
-    66: "Você também vai participar na colheita?",
-    67: "Medite na Bíblia e nas criações de Jeová",
-    68: "‘Continue a perdoar uns aos outros liberalmente’",
-    69: "Por que mostrar amor abnegado?",
-    70: "Por que Deus merece sua confiança?",
-    71: "‘Mantenha-se desperto’ — Por que e como?",
-    72: "O amor identifica os cristãos verdadeiros",
-    73: "Você tem 'um coração sábio'?",
-    74: "Os olhos de Jeová estão em todo lugar",
-    75: "Mostre que você apoia o direito de Jeová governar",
-    76: "Princípios bíblicos — Podem nos ajudar a lidar com os problemas atuais?",
-    77: "“Sempre mostrem hospitalidade”",
-    78: "Sirva a Jeová com um coração alegre",
-    79: "Você vai escolher ser amigo de Deus?",
-    80: "Você baseia sua esperança na ciência ou na Bíblia?",
-    81: "Quem está qualificado para fazer discípulos?",
-    82: "(Indisponível)",
-    83: "Tempo de julgamento da religião",
-    84: "Escapará do destino deste mundo?",
-    85: "Boas notícias num mundo violento",
-    86: "Como orar a Deus e ser ouvido por ele?",
-    87: "Qual é a sua relação com Deus?",
-    88: "Por que viver de acordo com os padrões da Bíblia?",
-    89: "Quem tem sede da verdade, venha!",
-    90: "Faça o máximo para alcançar a verdadeira vida!",
-    91: "A presença do Messias e seu domínio",
-    92: "O papel da religião nos assuntos do mundo",
-    93: "Desastres naturais — Quando vão acabar?",
-    94: "A religião verdadeira atende às necessidades da sociedade humana",
-    95: "Não seja enganado pelo ocultismo",
-    96: "O que vai acontecer com as religiões?",
-    97: "Permaneçamos inculpes em meio a uma geração pervertida",
-    98: "“A cena deste mundo está mudando”",
-    99: "Por que você pode confiar na Bíblia",
-    100: "Como fazer amizades fortes e verdadeiras",
-    101: "Jeová é o “Grandioso Criador”",
-    102: "Preste atenção à “palavra profética”",
-    103: "Pode-se encontrar alegria em servir a Deus",
-    104: "Pais, vocês estão construindo com materiais à prova de fogo?",
-    105: "Somos consolados em todas as nossas tribulações",
-    106: "Arruinar a Terra provocará retribuição divina",
-    107: "Você está treinando bem a sua consciência?",
-    108: "Você pode encarar o futuro com confiança!",
-    109: "O Reino de Deus está próximo",
-    110: "Deus vem primeiro na vida familiar bem sucedida",
-    111: "É possível que a humidade seja completamente curada?",
-    112: "(Indisponível)",
-    113: "Jovens — Como vocês podem ter uma vida feliz?",
-    114: "Apreço pelas maravilhas da criação de Deus",
-    115: "Como proteger nos contra os laços de Satanás",
-    116: "Escolha sabiamente com quem irá associar se!",
-    117: "Como vencer o mal com o bem",
-    118: "Olhemos os jovens do ponto de vista de Jeová",
-    119: "Por que é benéfico que os cristãos vivam separados do mundo",
-    120: "Por que se submeter à regência de Deus agora",
-    121: "Uma família mundial que será salva da destruição",
-    122: "Paz global — De onde virá?",
-    123: "Por que os cristãos têm de ser diferentes",
-    124: "Razões para crer que a Bíblia é de autoria divina",
-    125: "Por que a humanidade precisa de resgate",
-    126: "Quem se salvará?",
-    127: "O que acontece quando morremos?",
-    128: "É o inferno um lugar de tormento ardente?",
-    129: "O que a Bíblia diz sobre a Trindade?",
-    130: "A Terra permanecerá para sempre",
-    131: "(Indisponível)",
-    132: "(Indisponível)",
-    133: "Tem importância o que cremos sobre a nossa origem?",
-    134: "Devem os cristãos guardar o sábado?",
-    135: "A santidade da vida e do sangue",
-    136: "Será que Deus aprova o uso de imagens na adoração?",
-    137: "Ocorreram realmente os milagres da Bíblia?",
-    138: "Viva com bom juízo num mundo depravado",
-    139: "Sabedoria divina num mundo científico",
-    140: "Quem é realmente Jesus Cristo?",
-    141: "Quando terão fim os gemidos da criação humana?",
-    142: "Por que refugiar se em Jeová",
-    143: "Confie no Deus de todo consolo",
-    144: "Uma congregação leal sob a liderança de Cristo",
-    145: "Quem é semelhante a Jeová, nosso Deus?",
-    146: "Use a educação para louvar a Jeová",
-    147: "Confie no poder salvador de Jeová",
-    148: "Você tem o mesmo conceito de Deus sobre a vida?",
-    149: "O que significa 'andar com Deus'?",
-    150: "Este mundo está condenado à destruição?",
-    151: "Jeová é 'uma altura protetora' para seu povo",
-    152: "Armagedom — Por que e quando?",
-    153: "Tenha bem em mente o 'atemorizante dia'!",
-    154: "O governo humano é pesado na balança",
-    155: "Chegou a hora do julgamento de Babilônia?",
-    156: "O Dia do Juízo — Tempo de temor ou de esperança?",
-    157: "Como os verdadeiros cristãos adornam o ensino divino",
-    158: "Seja corajoso e confie em Jeová",
-    159: "Como encontrar segurança num mundo perigoso",
-    160: "Mantenha a identidade cristã!",
-    161: "Por que Jesus sofreu e morreu?",
-    162: "Seja liberto deste mundo em escuridão",
-    163: "Por que temer o Deus verdadeiro?",
-    164: "Será que Deus ainda está no controle?",
-    165: "Os valores de quem você preza?",
-    166: "Como enfrentar o futuro com fé e coragem",
-    167: "Ajamos sabiamente num mundo insensato",
-    168: "Você pode sentir se seguro neste mundo atribulado!",
-    169: "Por que ser orientado pela Bíblia?",
-    170: "Quem está qualificado para governar a humanidade?",
-    171: "Poderá viver em paz agora — E para sempre!",
-    172: "Que reputação você tem perante Deus?",
-    173: "Existe uma religião verdadeira do ponto de vista de Deus?",
-    174: "Quem se qualificará para entrar no novo mundo de Deus?",
-    175: "O que prova que a Bíblia é autêntica?",
-    176: "Quando haverá verdadeira paz e segurança?",
-    177: "Onde encontrar ajuda em tempos de aflição?",
-    178: "Ande no caminho da integridade",
-    179: "Rejeite as fantasias do mundo, empenhe-se pelas realidades do Reino",
-    180: "A ressurreição — Por que essa esperança deve ser real para você",
-    181: "Já é mais tarde do que você imagina?",
-    182: "O que o Reino de Deus está fazendo por nós agora?",
-    183: "Desvie seus olhos do que é fútil",
-    184: "A morte é o fim de tudo?",
-    185: "Será que a verdade influencia sua vida?",
-    186: "Sirva em união com o povo feliz de Deus",
-    187: "Por que um Deus amoroso permite a maldade?",
-    188: "Você confia em Jeová?",
-    189: "Ande com Deus e receba bênçãos para sempre",
-    190: "Como se cumprirá a promessa de perfeita felicidade familiar",
-    191: "Como o amor e a fé vencem o mundo",
-    192: "Você está no caminho para a vida eterna?",
-    193: "Os problemas de hoje logo serão coisa do passado",
-    194: "Como a sabedoria de Deus nos ajuda"
-}
+# Configuração do banco de dados para Render.com e desenvolvimento local
+def configure_database_uri():
+    db_uri = os.getenv('DATABASE_URL')
+    
+    if db_uri:
+        # Corrige a URI para PostgreSQL (necessário para versões mais recentes do SQLAlchemy)
+        if db_uri.startswith('postgres://'):
+            db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
+        return db_uri
+    return 'sqlite:///financas.db'
 
-# Configuração de caminhos
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONTAGEM_FILE = os.path.join(BASE_DIR, 'contagem.json')
+app.config['SQLALCHEMY_DATABASE_URI'] = configure_database_uri()
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
 
-# Configuração do pdfkit
-if platform.system() == "Windows":
-    config = pdfkit.configuration(wkhtmltopdf='C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe')
-else:
-    config = pdfkit.configuration(wkhtmltopdf='/usr/bin/wkhtmltopdf')
+# Configuração de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def carregar_contagem():
+db = SQLAlchemy(app)
+
+# Models
+class Ganho(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    valor = db.Column(db.Float, nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    origem = db.Column(db.String(50), nullable=False)
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    descricao = db.Column(db.String(200))
+
+class Despesa(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    valor = db.Column(db.Float, nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    categoria = db.Column(db.String(50), nullable=False)
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    descricao = db.Column(db.String(200))
+
+class CartaoCredito(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    valor = db.Column(db.Float, nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    parcela = db.Column(db.String(20), nullable=False)
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    descricao = db.Column(db.String(200))
+
+class Donativo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    valor = db.Column(db.Float, nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    instituicao = db.Column(db.String(100), nullable=False)
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    descricao = db.Column(db.String(200))
+
+class CategoriaDespesa(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(50), nullable=False, unique=True)
+    ativo = db.Column(db.Boolean, default=True)
+
+# Inicialização do banco de dados
+def initialize_database():
+    with app.app_context():
+        db.create_all()
+        
+        # Verifica se estamos usando SQLite para adicionar categorias padrão
+        if 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI']:
+            default_categories = ['Alimentação', 'Transporte', 'Moradia', 'Lazer', 'Saúde', 'Outros']
+            for cat in default_categories:
+                if not CategoriaDespesa.query.filter_by(nome=cat).first():
+                    db.session.add(CategoriaDespesa(nome=cat))
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Erro ao inicializar categorias: {str(e)}")
+
+initialize_database()
+
+# Helper functions
+def get_month_name(month_num):
+    months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+    return months[month_num - 1]
+
+# Rotas
+@app.route('/')
+def dashboard():
     try:
-        if os.path.exists(CONTAGEM_FILE):
-            with open(CONTAGEM_FILE, 'r') as f:
-                contagem_salva = json.load(f)
-                return {int(k): contagem_salva.get(str(k), 0) for k in temas.keys()}
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    return {k: 0 for k in temas.keys()}
+        totals = {
+            'ganhos': float(db.session.query(func.sum(Ganho.valor)).filter(Ganho.ativo == True).scalar() or 0),
+            'despesas': float(db.session.query(func.sum(Despesa.valor))
+                         .filter(Despesa.ativo == True)
+                         .scalar() or 0),
+            'cartao': float(db.session.query(func.sum(CartaoCredito.valor))
+                          .filter(CartaoCredito.ativo == True)
+                          .scalar() or 0),
+            'donativos': float(db.session.query(func.sum(Donativo.valor))
+                         .filter(Donativo.ativo == True)
+                         .scalar() or 0)
+        }
+        totals['saldo'] = totals['ganhos'] - totals['despesas'] - totals['cartao'] - totals['donativos']
 
-def salvar_contagem(contagem):
-    with open(CONTAGEM_FILE, 'w') as f:
-        json.dump({str(k): v for k, v in contagem.items()}, f)
+        transactions = []
+        for model in [Ganho, Despesa, CartaoCredito, Donativo]:
+            try:
+                transactions.extend(model.query.filter(model.ativo == True)
+                                  .order_by(model.data.desc())
+                                  .limit(5)
+                                  .all())
+            except Exception as e:
+                logger.error(f"Erro ao buscar transações para {model.__name__}: {str(e)}")
+                continue
 
-# Inicializa a contagem no início
-contagem_temas = carregar_contagem()
+        transactions.sort(key=lambda x: x.data if x.data else date.min, reverse=True)
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    global contagem_temas
-    temas_selecionados = []
+        return render_template('dashboard.html',
+                            total_ganhos=totals['ganhos'],
+                            total_despesas=totals['despesas'],
+                            total_cartao=totals['cartao'],
+                            total_donativos=totals['donativos'],
+                            saldo=totals['saldo'],
+                            movimentacoes=transactions[:5],
+                            now=datetime.now())
+    
+    except Exception as e:
+        logger.error(f'Erro no dashboard: {str(e)}', exc_info=True)
+        flash('Ocorreu um erro ao carregar os dados. Tente novamente.', 'danger')
+        return render_template('dashboard.html',
+                            total_ganhos=0,
+                            total_despesas=0,
+                            total_cartao=0,
+                            total_donativos=0,
+                            saldo=0,
+                            movimentacoes=[],
+                            now=datetime.now())
+
+@app.route('/adicionar', methods=['GET', 'POST'])
+def adicionar_movimentacao():
+    categories = CategoriaDespesa.query.filter_by(ativo=True).order_by(CategoriaDespesa.nome).all()
     
     if request.method == 'POST':
-        temas_selecionados = request.form.getlist('temas')
-        if temas_selecionados:
-            for tema in temas_selecionados:
-                if tema.isdigit():
-                    tema_id = int(tema)
-                    if tema_id in contagem_temas:
-                        contagem_temas[tema_id] += 1
-            salvar_contagem(contagem_temas)
+        try:
+            tipo = request.form['tipo']
+            valor = float(request.form['valor'])
+            data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+            descricao = request.form.get('descricao', '')
+            
+            if tipo == 'ganho':
+                origem = request.form['origem']
+                db.session.add(Ganho(valor=valor, data=data, origem=origem, descricao=descricao, ativo=True))
+            elif tipo == 'despesa':
+                categoria = request.form['categoria']
+                
+                if categoria == 'Outros' and 'nova_categoria' in request.form and request.form['nova_categoria'].strip():
+                    nova_categoria = request.form['nova_categoria'].strip()
+                    existing = CategoriaDespesa.query.filter_by(nome=nova_categoria).first()
+                    if existing:
+                        if not existing.ativo:
+                            existing.ativo = True
+                            db.session.commit()
+                        categoria = nova_categoria
+                    else:
+                        new_cat = CategoriaDespesa(nome=nova_categoria)
+                        db.session.add(new_cat)
+                        db.session.commit()
+                        categoria = nova_categoria
+                
+                db.session.add(Despesa(valor=valor, data=data, categoria=categoria, descricao=descricao, ativo=True))
+            elif tipo == 'cartao':
+                parcela = request.form['parcela']
+                db.session.add(CartaoCredito(valor=valor, data=data, parcela=parcela, descricao=descricao, ativo=True))
+            elif tipo == 'donativo':
+                instituicao = request.form['instituicao']
+                db.session.add(Donativo(valor=valor, data=data, instituicao=instituicao, descricao=descricao, ativo=True))
+            
+            db.session.commit()
+            flash('Movimentação registrada com sucesso!', 'success')
+            return redirect(url_for('dashboard'))
+        
+        except ValueError:
+            flash('Valor inválido! Use números para o valor.', 'danger')
+        except KeyError as e:
+            flash(f'Campo obrigatório faltando: {str(e)}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Erro ao adicionar movimentação: {str(e)}", exc_info=True)
+            flash(f'Erro ao salvar: {str(e)}', 'danger')
     
-    return render_template('index.html', 
-                         temas=temas, 
-                         contagem_temas=contagem_temas,
-                         temas_selecionados=[int(t) for t in temas_selecionados if t.isdigit()])
+    return render_template('adicionar_movimentacao.html', categorias=categories, now=datetime.now())
 
-@app.route('/zerar_contagens')
-def zerar_contagens():
-    global contagem_temas
-    contagem_temas = {k: 0 for k in temas.keys()}
-    salvar_contagem(contagem_temas)
-    return redirect('/')
-
-@app.route('/gerar_pdf')
-def gerar_pdf():
+@app.route('/extrato')
+def extrato():
     try:
-        rendered = render_template('pdf_template.html', 
-                                temas=temas, 
-                                contagem_temas=contagem_temas)
-        pdf = pdfkit.from_string(rendered, False, configuration=config)
-        return send_file(
-            io.BytesIO(pdf),
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name='Discursos públicos já feitos.pdf'
-        )
+        tipo = request.args.get('tipo', 'todos')
+        movimentacoes = []
+        
+        if tipo in ['todos', 'ganhos']:
+            movimentacoes.extend(Ganho.query.filter(Ganho.ativo == True).order_by(Ganho.data.desc()).all())
+        if tipo in ['todos', 'despesas']:
+            movimentacoes.extend(Despesa.query.filter(Despesa.ativo == True).order_by(Despesa.data.desc()).all())
+        if tipo in ['todos', 'cartao']:
+            movimentacoes.extend(CartaoCredito.query.filter(CartaoCredito.ativo == True).order_by(CartaoCredito.data.desc()).all())
+        if tipo in ['todos', 'donativos']:
+            movimentacoes.extend(Donativo.query.filter(Donativo.ativo == True).order_by(Donativo.data.desc()).all())
+        
+        return render_template('extrato.html', movimentacoes=movimentacoes, now=datetime.now())
     except Exception as e:
-        print(f"Erro ao gerar PDF: {str(e)}")
-        return "Erro ao gerar PDF", 500
+        logger.error(f"Erro ao carregar extrato: {str(e)}", exc_info=True)
+        flash(f'Erro ao carregar extrato: {str(e)}', 'danger')
+        return render_template('extrato.html', movimentacoes=[], now=datetime.now())
 
-@app.route('/favicon.ico')
-def favicon():
-    return '', 404
+@app.route('/relatorios')
+def relatorios():
+    return render_template('relatorios.html', now=datetime.now())
+
+@app.route('/relatorio_mensal', methods=['GET', 'POST'])
+def relatorio_mensal():
+    if request.method == 'POST':
+        try:
+            mes = int(request.form['mes'])
+            ano = int(request.form['ano'])
+            
+            ganhos = db.session.query(func.sum(Ganho.valor))\
+                .filter(
+                    extract('month', Ganho.data) == mes,
+                    extract('year', Ganho.data) == ano,
+                    Ganho.ativo == True
+                ).scalar() or 0
+            
+            despesas = db.session.query(func.sum(Despesa.valor))\
+                .filter(
+                    extract('month', Despesa.data) == mes,
+                    extract('year', Despesa.data) == ano,
+                    Despesa.ativo == True
+                ).scalar() or 0
+            
+            cartao = db.session.query(func.sum(CartaoCredito.valor))\
+                .filter(
+                    extract('month', CartaoCredito.data) == mes,
+                    extract('year', CartaoCredito.data) == ano,
+                    CartaoCredito.ativo == True
+                ).scalar() or 0
+            
+            donativos = db.session.query(func.sum(Donativo.valor))\
+                .filter(
+                    extract('month', Donativo.data) == mes,
+                    extract('year', Donativo.data) == ano,
+                    Donativo.ativo == True
+                ).scalar() or 0
+            
+            saldo = ganhos - despesas - cartao - donativos
+            
+            return render_template('relatorio_mensal.html',
+                                mes=mes,
+                                ano=ano,
+                                ganhos=ganhos,
+                                despesas=despesas,
+                                cartao=cartao,
+                                donativos=donativos,
+                                saldo=saldo,
+                                get_month_name=get_month_name,
+                                now=datetime.now())
+        
+        except Exception as e:
+            logger.error(f"Erro ao gerar relatório mensal: {str(e)}", exc_info=True)
+            flash(f'Erro ao gerar relatório: {str(e)}', 'danger')
+            return redirect(url_for('relatorio_mensal'))
+    
+    return render_template('selecionar_mes_ano.html', tipo='mensal', now=datetime.now())
+
+@app.route('/relatorio_anual', methods=['GET', 'POST'])
+def relatorio_anual():
+    if request.method == 'POST':
+        try:
+            ano = int(request.form['ano'])
+            
+            ganhos_mensais = db.session.query(
+                extract('month', Ganho.data).label('mes'),
+                func.sum(Ganho.valor).label('total')
+            ).filter(
+                extract('year', Ganho.data) == ano,
+                Ganho.ativo == True
+            ).group_by('mes').order_by('mes').all()
+            
+            despesas_mensais = db.session.query(
+                extract('month', Despesa.data).label('mes'),
+                func.sum(Despesa.valor).label('total')
+            ).filter(
+                extract('year', Despesa.data) == ano,
+                Despesa.ativo == True
+            ).group_by('mes').order_by('mes').all()
+            
+            cartao_mensal = db.session.query(
+                extract('month', CartaoCredito.data).label('mes'),
+                func.sum(CartaoCredito.valor).label('total')
+            ).filter(
+                extract('year', CartaoCredito.data) == ano,
+                CartaoCredito.ativo == True
+            ).group_by('mes').order_by('mes').all()
+            
+            donativos_mensal = db.session.query(
+                extract('month', Donativo.data).label('mes'),
+                func.sum(Donativo.valor).label('total')
+            ).filter(
+                extract('year', Donativo.data) == ano,
+                Donativo.ativo == True
+            ).group_by('mes').order_by('mes').all()
+            
+            total_ganhos = sum([g.total for g in ganhos_mensais])
+            total_despesas = sum([d.total for d in despesas_mensais])
+            total_cartao = sum([c.total for c in cartao_mensal])
+            total_donativos = sum([d.total for d in donativos_mensal])
+            saldo_anual = total_ganhos - total_despesas - total_cartao - total_donativos
+            
+            return render_template('relatorio_anual.html',
+                                ano=ano,
+                                ganhos_mensais=ganhos_mensais,
+                                despesas_mensais=despesas_mensais,
+                                cartao_mensal=cartao_mensal,
+                                donativos_mensal=donativos_mensal,
+                                total_ganhos=total_ganhos,
+                                total_despesas=total_despesas,
+                                total_cartao=total_cartao,
+                                total_donativos=total_donativos,
+                                saldo_anual=saldo_anual,
+                                get_month_name=get_month_name,
+                                now=datetime.now())
+        
+        except Exception as e:
+            logger.error(f"Erro ao gerar relatório anual: {str(e)}", exc_info=True)
+            flash(f'Erro ao gerar relatório: {str(e)}', 'danger')
+            return redirect(url_for('relatorio_anual'))
+    
+    return render_template('selecionar_ano.html', tipo='anual', now=datetime.now())
+
+@app.route('/excluir/<tipo>/<int:id>', methods=['POST'])
+def excluir_movimentacao(tipo, id):
+    try:
+        model = {
+            'ganho': Ganho,
+            'despesa': Despesa,
+            'cartao': CartaoCredito,
+            'donativo': Donativo
+        }.get(tipo)
+        
+        if not model:
+            return jsonify({'success': False, 'message': 'Tipo inválido'}), 400
+        
+        registro = db.session.get(model, id)
+        if registro:
+            registro.ativo = False
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Registro excluído com sucesso'})
+        return jsonify({'success': False, 'message': 'Registro não encontrado'}), 404
+    
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Erro ao excluir movimentação: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    # Garante que o arquivo de contagem existe ao iniciar
-    if not os.path.exists(CONTAGEM_FILE):
-        salvar_contagem({k: 0 for k in temas.keys()})
-    
-    try:
-        app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), debug=False)
-    except KeyboardInterrupt:
-        print("\nServidor encerrado pelo usuário.")
-        sys.exit(0)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
