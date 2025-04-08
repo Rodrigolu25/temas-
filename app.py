@@ -1,377 +1,302 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, date
-from sqlalchemy import func, extract
+from flask import Flask, render_template, request, send_file, redirect
+import pdfkit
+import io
+import platform
+import json
 import os
-from dotenv import load_dotenv
-from urllib.parse import urlparse
-import logging
-
-# Configuração inicial
-load_dotenv()
+import signal
+import sys
+import threading
 
 app = Flask(__name__)
+app.secret_key = 'sua_chave_secreta'  # Necessário para mensagens flash
 
-# Configuração do banco de dados para Render.com e desenvolvimento local
-def configure_database_uri():
-    db_uri = os.getenv('DATABASE_URL')
-    
-    if db_uri:
-        # Corrige a URI para PostgreSQL (necessário para versões mais recentes do SQLAlchemy)
-        if db_uri.startswith('postgres://'):
-            db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
-        return db_uri
-    return 'sqlite:///financas.db'
+# Dicionário de temas
+temas = {
+    1: "Você conhece bem a Deus?",
+    2: "Você vai sobreviver aos últimos dias?",
+    3: "Você está avançando com a organização unida de Jeová?",
+    4: "Que provas temos de que Deus existe?",
+    5: "Você pode ter uma família feliz!",
+    6: "O dilúvio dos dias de Noé e você",
+    7: "Imite a misericórdia de Jeová",
+    8: "Viva para fazer a vontade de Deus",
+    9: "Escute e faça o que a Bíblia diz",
+    10: "Seja honesto em tudo",
+    11: "Imite a Jesus e não faça parte do mundo",
+    12: "Deus quer que você respeite quem tem autoridade",
+    13: "Qual o ponto de vista de Deus sobre o sexo e o casamento?",
+    14: "Um povo puro e limpo honra a Jeová",
+    15: "‘Faça o bem a todos’",
+    16: "Seja cada vez mais amigo de Jeová",
+    17: "Glorifique a Deus com tudo o que você tem",
+    18: "Faça de Jeová a sua fortaleza",
+    19: "Como você pode saber seu futuro?",
+    20: "Chegou o tempo de Deus governar o mundo?",
+    21: "Dê valor ao seu lugar no Reino de Deus",
+    22: "Você está usando bem o que Jeová lhe dá?",
+    23: "A vida tem objetivo",
+    24: "Você encontrou “uma pérola de grande valor”?",
+    25: "Lute contra o espírito do mundo",
+    26: "Você é importante para Deus?",
+    27: "Como construir um casamento feliz",
+    28: "Mostre respeito e amor no seu casamento",
+    29: "As responsabilidades e recompensas de ter filhos",
+    30: "Como melhorar a comunicação na família",
+    31: "Você tem consciência da sua necessidade espiritual?",
+    32: "Como lidar com as ansiedades da vida",
+    33: "Quando vai existir verdadeira justiça?",
+    34: "Você vai ser marcado para sobreviver?",
+    35: "É possível viver para sempre? O que você precisa fazer?",
+    36: "Será que a vida é só isso?",
+    37: "Obedecer a Deus é mesmo a melhor coisa a fazer?",
+    38: "Como você pode sobreviver ao fim do mundo?",
+    39: "Jesus Cristo vence o mundo — Como e quando?",
+    40: "O que vai acontecer em breve?",
+    41: "Fiquem parados e vejam como Jeová os salvará",
+    42: "O amor pode vencer o ódio?",
+    43: "Tudo o que Deus nos pede é para o nosso bem",
+    44: "Como os ensinos de Jesus podem ajudar você?",
+    45: "Continue andando no caminho que leva à vida",
+    46: "Fortaleça sua confiança em Jeová",
+    47: "‘Tenha fé nas boas novas’",
+    48: "Seja leal a Deus mesmo quando for testado",
+    49: "Será que um dia a Terra vai ser limpa?",
+    50: "Como sempre tomar as melhores decisões",
+    51: "Será que a verdade da Bíblia está mudando a sua vida?",
+    52: "Quem é o seu Deus?",
+    53: "Você pensa como Deus?",
+    54: "Fortaleça sua fé em Deus e em suas promessas",
+    55: "Você está fazendo um bom nome perante Deus?",
+    56: "Existe um líder em quem você pode confiar?",
+    57: "Como suportar perseguição",
+    58: "Quem são os verdadeiros seguidores de Cristo?",
+    59: "Ceifará o que semear",
+    60: "Você tem um objetivo na vida?",
+    61: "Nas promessas de quem você confia?",
+    62: "Onde encontrar uma esperança real para o futuro?",
+    63: "Tem você espírito evangelizador?",
+    64: "Como você pode ter paz verdadeira?",
+    65: "Você está preparado para o futuro?",
+    66: "O que a Bíblia diz sobre a vida após a morte?",
+    67: "Como lidar com a dor e a perda?",
+    68: "Você está vivendo de acordo com a vontade de Deus?",
+    69: "Como a oração pode mudar sua vida?",
+    70: "Você está se aproximando de Jeová?",
+    71: "Como a Bíblia pode ajudar em tempos difíceis?",
+    72: "Você está fazendo a diferença no mundo?",
+    73: "Como ser um bom amigo?",
+    74: "Você está cuidando do seu corpo?",
+    75: "Como encontrar alegria na vida?",
+    76: "Você está preparado para enfrentar desafios?",
+    77: "Como a fé pode transformar sua vida?",
+    78: "Você está vivendo com propósito?",
+    79: "Como a gratidão pode mudar sua perspectiva?",
+    80: "Você está fazendo escolhas sábias?",
+    81: "Como lidar com a pressão dos colegas?",
+    82: "Você está se comunicando bem com os outros?",
+    83: "Como a Bíblia pode ajudar em relacionamentos?",
+    84: "Você está investindo no seu crescimento pessoal?",
+    85: "Como ser um líder eficaz?",
+    86: "Você está aprendendo com seus erros?",
+    87: "Como a humildade pode beneficiar sua vida?",
+    88: "Você está buscando a verdade?",
+    89: "Como a fé pode ajudar em momentos de dúvida?",
+    90: "Você está se preparando para o futuro?",
+    91: "Como a esperança pode mudar sua vida?",
+    92: "Você está vivendo em harmonia com os outros?",
+    93: "Como a compaixão pode transformar o mundo?",
+    94: "Você está fazendo a diferença na sua comunidade?",
+    95: "Como a paciência pode melhorar seus relacionamentos?",
+    96: "Você está cuidando do seu bem-estar emocional?",
+    97: "Como a sabedoria pode guiar suas decisões?",
+    98: "Você está se esforçando para ser melhor?",
+    99: "Como a fé pode ajudar em tempos de crise?",
+    100: "Você está buscando a paz interior?",
+    101: "Como a bondade pode impactar sua vida?",
+    102: "Você está vivendo de acordo com seus valores?",
+    103: "Como a perseverança pode levar ao sucesso?",
+    104: "Você está se cercando de pessoas positivas?",
+    105: "Como a honestidade pode fortalecer relacionamentos?",
+    106: "Você está aprendendo a perdoar?",
+    107: "Como a generosidade pode enriquecer sua vida?",
+    108: "Você está se dedicando ao seu desenvolvimento espiritual?",
+    109: "Como a fé pode ajudar a superar medos?",
+    110: "Você está buscando a verdadeira felicidade?",
+    111: "Como a disciplina pode levar ao sucesso?",
+    112: "Você está se preparando para o futuro com sabedoria?",
+    113: "Como a fé pode ajudar a encontrar paz interior?",
+    114: "Você está vivendo de acordo com seus princípios?",
+    115: "Como a empatia pode melhorar suas interações?",
+    116: "Você está se esforçando para ser um bom ouvinte?",
+    117: "Como a reflexão pode ajudar no autoconhecimento?",
+    118: "Você está buscando a sabedoria em suas decisões?",
+    119: "Como a fé pode ajudar a superar a dúvida?",
+    120: "Você está se dedicando a aprender mais sobre si mesmo?",
+    121: "Como a oração pode fortalecer sua conexão com Deus?",
+    122: "Você está vivendo de forma autêntica?",
+    123: "Como a gratidão pode mudar sua vida?",
+    124: "Você está se esforçando para ser mais gentil?",
+    125: "Como a fé pode ajudar a enfrentar desafios?",
+    126: "Você está buscando a verdade em sua vida?",
+    127: "Como a esperança pode inspirar você?",
+    128: "Você está se dedicando a ajudar os outros?",
+    129: "Como a fé pode trazer paz em tempos difíceis?",
+    130: "Você está vivendo com propósito e intenção?",
+    131: "Como a bondade pode impactar o mundo ao seu redor?",
+    132: "Você está se esforçando para ser mais compreensivo?",
+    133: "Como a fé pode ajudar a superar obstáculos?",
+    134: "Você está buscando a felicidade em sua vida?",
+    135: "Como a disciplina pode levar a resultados positivos?",
+    136: "Você está se cercando de influências positivas?",
+    137: "Como a honestidade pode transformar suas relações?",
+    138: "Você está aprendendo a valorizar o que realmente importa?",
+    139: "Como a generosidade pode enriquecer sua vida?",
+    140: "Você está se dedicando a ajudar os necessitados?",
+    141: "Como a fé pode ajudar a encontrar significado na vida?",
+    142: "Você está vivendo de forma consciente?",
+    143: "Como a gratidão pode melhorar seu bem-estar?",
+    144: "Você está se esforçando para ser mais gentil com os outros?",
+    145: "Como a fé pode ajudar a superar a tristeza?",
+    146: "Você está buscando a verdade em suas crenças?",
+    147: "Como a esperança pode motivá-lo a seguir em frente?",
+    148: "Você está se dedicando a cultivar relacionamentos saudáveis?",
+    149: "Como a fé pode trazer clareza em tempos de confusão?",
+    150: "Você está vivendo com integridade e honestidade?",
+    151: "Como a empatia pode melhorar sua vida social?",
+    152: "Você está se esforçando para ser um bom amigo?",
+    153: "Como a reflexão pode ajudar a entender suas emoções?",
+    154: "Você está buscando a sabedoria em suas experiências?",
+    155: "Como a fé pode ajudar a encontrar paz em meio ao caos?",
+    156: "Você está se dedicando a aprender com seus erros?",
+    157: "Como a oração pode trazer conforto em momentos difíceis?",
+    158: "Você está vivendo de forma autêntica e verdadeira?",
+    159: "Como a gratidão pode mudar sua perspectiva de vida?",
+    160: "Você está se esforçando para ser mais solidário?",
+    161: "Como a fé pode ajudar a encontrar seu propósito?",
+    162: "Você está buscando a verdade em suas ações?",
+    163: "Como a esperança pode inspirar suas escolhas?",
+    164: "Você está se dedicando a fazer a diferença na vida dos outros?",
+    165: "Como a fé pode trazer conforto em tempos difíceis?",
+    166: "Você está vivendo com intenção e propósito?",
+    167: "Como a bondade pode impactar sua comunidade?",
+    168: "Você está se esforçando para ser mais paciente?",
+    169: "Como a fé pode ajudar a enfrentar desafios diários?",
+    170: "Você está buscando a felicidade em suas relações?",
+    171: "Como a disciplina pode levar a um estilo de vida saudável?",
+    172: "Você está se cercando de pessoas que o inspiram?",
+    173: "Como a honestidade pode fortalecer sua reputação?",
+    174: "Você está aprendendo a perdoar a si mesmo?",
+    175: "Como a generosidade pode enriquecer sua vida?",
+    176: "Você está se dedicando a ajudar os necessitados?",
+    177: "Como a fé pode ajudar a encontrar significado na vida?",
+    178: "Você está vivendo de forma consciente?",
+    179: "Como a gratidão pode melhorar seu bem-estar?",
+    180: "Você está se esforçando para ser mais gentil com os outros?",
+    181: "Como a fé pode ajudar a superar a tristeza?",
+    182: "Você está buscando a verdade em suas crenças?",
+    183: "Como a esperança pode motivá-lo a seguir em frente?",
+    184: "Você está se dedicando a cultivar relacionamentos saudáveis?",
+    185: "Como a fé pode trazer clareza em tempos de confusão?",
+    186: "Você está vivendo com integridade e honestidade?",
+    187: "Como a empatia pode melhorar sua vida social?",
+    188: "Você está se esforçando para ser um bom amigo?",
+    189: "Como a reflexão pode ajudar a entender suas emoções?",
+    190: "Você está buscando a sabedoria em suas experiências?",
+    191: "Como a fé pode ajudar a encontrar paz em meio ao caos?",
+    192: "Você está se dedicando a aprender com seus erros?",
+    193: "Como a oração pode trazer conforto em momentos difíceis?",
+    194: "Você está vivendo de forma autêntica e verdadeira?",
+    195: "Como a gratidão pode mudar sua perspectiva de vida?",
+    196: "Você está se esforçando para ser mais solidário?",
+    197: "Como a fé pode ajudar a encontrar seu propósito?",
+    198: "Você está buscando a verdade em suas ações?",
+    199: "Como a esperança pode inspirar suas escolhas?",
+    200: "Você está se dedicando a fazer a diferença na vida dos outros?"
+}
 
-app.config['SQLALCHEMY_DATABASE_URI'] = configure_database_uri()
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
+# Configuração de caminhos
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONTAGEM_FILE = os.path.join(BASE_DIR, 'contagem.json')
 
-# Configuração de logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configuração do pdfkit
+if platform.system() == "Windows":
+    config = pdfkit.configuration(wkhtmltopdf='C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe')
+else:
+    config = pdfkit.configuration(wkhtmltopdf='/usr/bin/wkhtmltopdf')
 
-db = SQLAlchemy(app)
-
-# Models
-class Ganho(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    valor = db.Column(db.Float, nullable=False)
-    data = db.Column(db.Date, nullable=False)
-    origem = db.Column(db.String(50), nullable=False)
-    ativo = db.Column(db.Boolean, default=True, nullable=False)
-    descricao = db.Column(db.String(200))
-
-class Despesa(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    valor = db.Column(db.Float, nullable=False)
-    data = db.Column(db.Date, nullable=False)
-    categoria = db.Column(db.String(50), nullable=False)
-    ativo = db.Column(db.Boolean, default=True, nullable=False)
-    descricao = db.Column(db.String(200))
-
-class CartaoCredito(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    valor = db.Column(db.Float, nullable=False)
-    data = db.Column(db.Date, nullable=False)
-    parcela = db.Column(db.String(20), nullable=False)
-    ativo = db.Column(db.Boolean, default=True, nullable=False)
-    descricao = db.Column(db.String(200))
-
-class Donativo(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    valor = db.Column(db.Float, nullable=False)
-    data = db.Column(db.Date, nullable=False)
-    instituicao = db.Column(db.String(100), nullable=False)
-    ativo = db.Column(db.Boolean, default=True, nullable=False)
-    descricao = db.Column(db.String(200))
-
-class CategoriaDespesa(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(50), nullable=False, unique=True)
-    ativo = db.Column(db.Boolean, default=True)
-
-# Inicialização do banco de dados
-def initialize_database():
-    with app.app_context():
-        db.create_all()
-        
-        # Verifica se estamos usando SQLite para adicionar categorias padrão
-        if 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI']:
-            default_categories = ['Alimentação', 'Transporte', 'Moradia', 'Lazer', 'Saúde', 'Outros']
-            for cat in default_categories:
-                if not CategoriaDespesa.query.filter_by(nome=cat).first():
-                    db.session.add(CategoriaDespesa(nome=cat))
-            try:
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                logger.error(f"Erro ao inicializar categorias: {str(e)}")
-
-initialize_database()
-
-# Helper functions
-def get_month_name(month_num):
-    months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-    return months[month_num - 1]
-
-# Rotas
-@app.route('/')
-def dashboard():
+def carregar_contagem():
     try:
-        totals = {
-            'ganhos': float(db.session.query(func.sum(Ganho.valor)).filter(Ganho.ativo == True).scalar() or 0),
-            'despesas': float(db.session.query(func.sum(Despesa.valor))
-                         .filter(Despesa.ativo == True)
-                         .scalar() or 0),
-            'cartao': float(db.session.query(func.sum(CartaoCredito.valor))
-                          .filter(CartaoCredito.ativo == True)
-                          .scalar() or 0),
-            'donativos': float(db.session.query(func.sum(Donativo.valor))
-                         .filter(Donativo.ativo == True)
-                         .scalar() or 0)
-        }
-        totals['saldo'] = totals['ganhos'] - totals['despesas'] - totals['cartao'] - totals['donativos']
+        if os.path.exists(CONTAGEM_FILE):
+            with open(CONTAGEM_FILE, 'r') as f:
+                contagem_salva = json.load(f)
+                return {int(k): contagem_salva.get(str(k), 0) for k in temas.keys()}
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return {k: 0 for k in temas.keys()}
 
-        transactions = []
-        for model in [Ganho, Despesa, CartaoCredito, Donativo]:
-            try:
-                transactions.extend(model.query.filter(model.ativo == True)
-                                  .order_by(model.data.desc())
-                                  .limit(5)
-                                  .all())
-            except Exception as e:
-                logger.error(f"Erro ao buscar transações para {model.__name__}: {str(e)}")
-                continue
+def salvar_contagem(contagem):
+    with open(CONTAGEM_FILE, 'w') as f:
+        json.dump({str(k): v for k, v in contagem.items()}, f)
 
-        transactions.sort(key=lambda x: x.data if x.data else date.min, reverse=True)
+# Inicializa a contagem no início
+contagem_temas = carregar_contagem()
 
-        return render_template('dashboard.html',
-                            total_ganhos=totals['ganhos'],
-                            total_despesas=totals['despesas'],
-                            total_cartao=totals['cartao'],
-                            total_donativos=totals['donativos'],
-                            saldo=totals['saldo'],
-                            movimentacoes=transactions[:5],
-                            now=datetime.now())
-    
-    except Exception as e:
-        logger.error(f'Erro no dashboard: {str(e)}', exc_info=True)
-        flash('Ocorreu um erro ao carregar os dados. Tente novamente.', 'danger')
-        return render_template('dashboard.html',
-                            total_ganhos=0,
-                            total_despesas=0,
-                            total_cartao=0,
-                            total_donativos=0,
-                            saldo=0,
-                            movimentacoes=[],
-                            now=datetime.now())
-
-@app.route('/adicionar', methods=['GET', 'POST'])
-def adicionar_movimentacao():
-    categories = CategoriaDespesa.query.filter_by(ativo=True).order_by(CategoriaDespesa.nome).all()
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    global contagem_temas
+    temas_selecionados = []
     
     if request.method == 'POST':
-        try:
-            tipo = request.form['tipo']
-            valor = float(request.form['valor'])
-            data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
-            descricao = request.form.get('descricao', '')
-            
-            if tipo == 'ganho':
-                origem = request.form['origem']
-                db.session.add(Ganho(valor=valor, data=data, origem=origem, descricao=descricao, ativo=True))
-            elif tipo == 'despesa':
-                categoria = request.form['categoria']
-                
-                if categoria == 'Outros' and 'nova_categoria' in request.form and request.form['nova_categoria'].strip():
-                    nova_categoria = request.form['nova_categoria'].strip()
-                    existing = CategoriaDespesa.query.filter_by(nome=nova_categoria).first()
-                    if existing:
-                        if not existing.ativo:
-                            existing.ativo = True
-                            db.session.commit()
-                        categoria = nova_categoria
-                    else:
-                        new_cat = CategoriaDespesa(nome=nova_categoria)
-                        db.session.add(new_cat)
-                        db.session.commit()
-                        categoria = nova_categoria
-                
-                db.session.add(Despesa(valor=valor, data=data, categoria=categoria, descricao=descricao, ativo=True))
-            elif tipo == 'cartao':
-                parcela = request.form['parcela']
-                db.session.add(CartaoCredito(valor=valor, data=data, parcela=parcela, descricao=descricao, ativo=True))
-            elif tipo == 'donativo':
-                instituicao = request.form['instituicao']
-                db.session.add(Donativo(valor=valor, data=data, instituicao=instituicao, descricao=descricao, ativo=True))
-            
-            db.session.commit()
-            flash('Movimentação registrada com sucesso!', 'success')
-            return redirect(url_for('dashboard'))
-        
-        except ValueError:
-            flash('Valor inválido! Use números para o valor.', 'danger')
-        except KeyError as e:
-            flash(f'Campo obrigatório faltando: {str(e)}', 'danger')
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Erro ao adicionar movimentação: {str(e)}", exc_info=True)
-            flash(f'Erro ao salvar: {str(e)}', 'danger')
+        temas_selecionados = request.form.getlist('temas')
+        if temas_selecionados:
+            for tema in temas_selecionados:
+                if tema.isdigit():
+                    tema_id = int(tema)
+                    if tema_id in contagem_temas:
+                        contagem_temas[tema_id] += 1
+            salvar_contagem(contagem_temas)
     
-    return render_template('adicionar_movimentacao.html', categorias=categories, now=datetime.now())
+    return render_template('index.html', 
+                         temas=temas, 
+                         contagem_temas=contagem_temas,
+                         temas_selecionados=[int(t) for t in temas_selecionados if t.isdigit()])
 
-@app.route('/extrato')
-def extrato():
+@app.route('/zerar_contagens')
+def zerar_contagens():
+    global contagem_temas
+    contagem_temas = {k: 0 for k in temas.keys()}
+    salvar_contagem(contagem_temas)
+    return redirect('/')
+
+@app.route('/gerar_pdf')
+def gerar_pdf():
     try:
-        tipo = request.args.get('tipo', 'todos')
-        movimentacoes = []
-        
-        if tipo in ['todos', 'ganhos']:
-            movimentacoes.extend(Ganho.query.filter(Ganho.ativo == True).order_by(Ganho.data.desc()).all())
-        if tipo in ['todos', 'despesas']:
-            movimentacoes.extend(Despesa.query.filter(Despesa.ativo == True).order_by(Despesa.data.desc()).all())
-        if tipo in ['todos', 'cartao']:
-            movimentacoes.extend(CartaoCredito.query.filter(CartaoCredito.ativo == True).order_by(CartaoCredito.data.desc()).all())
-        if tipo in ['todos', 'donativos']:
-            movimentacoes.extend(Donativo.query.filter(Donativo.ativo == True).order_by(Donativo.data.desc()).all())
-        
-        return render_template('extrato.html', movimentacoes=movimentacoes, now=datetime.now())
+        rendered = render_template('pdf_template.html', 
+                                temas=temas, 
+                                contagem_temas=contagem_temas)
+        pdf = pdfkit.from_string(rendered, False, configuration=config)
+        return send_file(
+            io.BytesIO(pdf),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name='contagem_temas.pdf'
+        )
     except Exception as e:
-        logger.error(f"Erro ao carregar extrato: {str(e)}", exc_info=True)
-        flash(f'Erro ao carregar extrato: {str(e)}', 'danger')
-        return render_template('extrato.html', movimentacoes=[], now=datetime.now())
+        print(f"Erro ao gerar PDF: {str(e)}")
+        return "Erro ao gerar PDF", 500
 
-@app.route('/relatorios')
-def relatorios():
-    return render_template('relatorios.html', now=datetime.now())
-
-@app.route('/relatorio_mensal', methods=['GET', 'POST'])
-def relatorio_mensal():
-    if request.method == 'POST':
-        try:
-            mes = int(request.form['mes'])
-            ano = int(request.form['ano'])
-            
-            ganhos = db.session.query(func.sum(Ganho.valor))\
-                .filter(
-                    extract('month', Ganho.data) == mes,
-                    extract('year', Ganho.data) == ano,
-                    Ganho.ativo == True
-                ).scalar() or 0
-            
-            despesas = db.session.query(func.sum(Despesa.valor))\
-                .filter(
-                    extract('month', Despesa.data) == mes,
-                    extract('year', Despesa.data) == ano,
-                    Despesa.ativo == True
-                ).scalar() or 0
-            
-            cartao = db.session.query(func.sum(CartaoCredito.valor))\
-                .filter(
-                    extract('month', CartaoCredito.data) == mes,
-                    extract('year', CartaoCredito.data) == ano,
-                    CartaoCredito.ativo == True
-                ).scalar() or 0
-            
-            donativos = db.session.query(func.sum(Donativo.valor))\
-                .filter(
-                    extract('month', Donativo.data) == mes,
-                    extract('year', Donativo.data) == ano,
-                    Donativo.ativo == True
-                ).scalar() or 0
-            
-            saldo = ganhos - despesas - cartao - donativos
-            
-            return render_template('relatorio_mensal.html',
-                                mes=mes,
-                                ano=ano,
-                                ganhos=ganhos,
-                                despesas=despesas,
-                                cartao=cartao,
-                                donativos=donativos,
-                                saldo=saldo,
-                                get_month_name=get_month_name,
-                                now=datetime.now())
-        
-        except Exception as e:
-            logger.error(f"Erro ao gerar relatório mensal: {str(e)}", exc_info=True)
-            flash(f'Erro ao gerar relatório: {str(e)}', 'danger')
-            return redirect(url_for('relatorio_mensal'))
-    
-    return render_template('selecionar_mes_ano.html', tipo='mensal', now=datetime.now())
-
-@app.route('/relatorio_anual', methods=['GET', 'POST'])
-def relatorio_anual():
-    if request.method == 'POST':
-        try:
-            ano = int(request.form['ano'])
-            
-            ganhos_mensais = db.session.query(
-                extract('month', Ganho.data).label('mes'),
-                func.sum(Ganho.valor).label('total')
-            ).filter(
-                extract('year', Ganho.data) == ano,
-                Ganho.ativo == True
-            ).group_by('mes').order_by('mes').all()
-            
-            despesas_mensais = db.session.query(
-                extract('month', Despesa.data).label('mes'),
-                func.sum(Despesa.valor).label('total')
-            ).filter(
-                extract('year', Despesa.data) == ano,
-                Despesa.ativo == True
-            ).group_by('mes').order_by('mes').all()
-            
-            cartao_mensal = db.session.query(
-                extract('month', CartaoCredito.data).label('mes'),
-                func.sum(CartaoCredito.valor).label('total')
-            ).filter(
-                extract('year', CartaoCredito.data) == ano,
-                CartaoCredito.ativo == True
-            ).group_by('mes').order_by('mes').all()
-            
-            donativos_mensal = db.session.query(
-                extract('month', Donativo.data).label('mes'),
-                func.sum(Donativo.valor).label('total')
-            ).filter(
-                extract('year', Donativo.data) == ano,
-                Donativo.ativo == True
-            ).group_by('mes').order_by('mes').all()
-            
-            total_ganhos = sum([g.total for g in ganhos_mensais])
-            total_despesas = sum([d.total for d in despesas_mensais])
-            total_cartao = sum([c.total for c in cartao_mensal])
-            total_donativos = sum([d.total for d in donativos_mensal])
-            saldo_anual = total_ganhos - total_despesas - total_cartao - total_donativos
-            
-            return render_template('relatorio_anual.html',
-                                ano=ano,
-                                ganhos_mensais=ganhos_mensais,
-                                despesas_mensais=despesas_mensais,
-                                cartao_mensal=cartao_mensal,
-                                donativos_mensal=donativos_mensal,
-                                total_ganhos=total_ganhos,
-                                total_despesas=total_despesas,
-                                total_cartao=total_cartao,
-                                total_donativos=total_donativos,
-                                saldo_anual=saldo_anual,
-                                get_month_name=get_month_name,
-                                now=datetime.now())
-        
-        except Exception as e:
-            logger.error(f"Erro ao gerar relatório anual: {str(e)}", exc_info=True)
-            flash(f'Erro ao gerar relatório: {str(e)}', 'danger')
-            return redirect(url_for('relatorio_anual'))
-    
-    return render_template('selecionar_ano.html', tipo='anual', now=datetime.now())
-
-@app.route('/excluir/<tipo>/<int:id>', methods=['POST'])
-def excluir_movimentacao(tipo, id):
-    try:
-        model = {
-            'ganho': Ganho,
-            'despesa': Despesa,
-            'cartao': CartaoCredito,
-            'donativo': Donativo
-        }.get(tipo)
-        
-        if not model:
-            return jsonify({'success': False, 'message': 'Tipo inválido'}), 400
-        
-        registro = db.session.get(model, id)
-        if registro:
-            registro.ativo = False
-            db.session.commit()
-            return jsonify({'success': True, 'message': 'Registro excluído com sucesso'})
-        return jsonify({'success': False, 'message': 'Registro não encontrado'}), 404
-    
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Erro ao excluir movimentação: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'message': str(e)}), 500
+@app.route('/favicon.ico')
+def favicon():
+    return '', 404
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    # Garante que o arquivo de contagem existe ao iniciar
+    if not os.path.exists(CONTAGEM_FILE):
+        salvar_contagem({k: 0 for k in temas.keys()})
+    
+    try:
+        app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), debug=False)
+    except KeyboardInterrupt:
+        print("\nServidor encerrado pelo usuário.")
+        sys.exit(0)
